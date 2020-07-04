@@ -1,0 +1,75 @@
+from flask import Flask, redirect, url_for, request
+from urllib.parse import urlencode, quote_plus
+import requests
+import base64
+from dotenv import load_dotenv
+from os import environ
+load_dotenv()
+
+app = Flask(__name__)
+app.debug = True
+
+CLIENT_ID = environ.get('CLIENT_ID')
+CLIENT_SECRET = environ.get('CLIENT_SECRET')
+print(CLIENT_ID)
+print(CLIENT_SECRET)
+REDIRECT_URI = "http://127.0.0.1:5000/callback"
+
+@app.route("/login")
+def login():
+    scope = "user-top-read user-read-private"
+
+    # add state to queries
+
+    auth_queries = {
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": scope,
+    }
+
+    print(
+        "https://accounts.spotify.com/authorize?"
+        + urlencode(auth_queries, quote_via=quote_plus)
+    )
+
+    return redirect(
+        "https://accounts.spotify.com/authorize?"
+        + urlencode(auth_queries, quote_via=quote_plus)
+    )
+
+
+@app.route("/callback")
+def callback():
+    auth_code = request.args.get("code")
+    # add state
+
+    message = CLIENT_ID + ":" + CLIENT_SECRET
+    message_bytes = message.encode("ascii")
+    base64_bytes = base64.b64encode(message_bytes)
+    base64_message = base64_bytes.decode("ascii")
+
+    headers = {"Authorization": "Basic " + base64_message}
+
+    body = {
+        "grant_type": "authorization_code",
+        "code": auth_code,
+        "redirect_uri": REDIRECT_URI,
+    }
+
+    res = requests.post(
+        url="https://accounts.spotify.com/api/token", headers=headers, data=body
+    )
+
+    return res.text
+
+
+@app.route("/refresh_token")
+def refreshToken():
+    # req param will be the refresh token
+    # send post req to api with refresh token to receive new access token
+    pass
+
+
+if __name__ == "__main__":
+    app.run()
