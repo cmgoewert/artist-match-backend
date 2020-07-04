@@ -2,17 +2,19 @@ from flask import Flask, redirect, url_for, request
 from urllib.parse import urlencode, quote_plus
 import requests
 import base64
+import json
 from dotenv import load_dotenv
 from os import environ
+from random import randint
 load_dotenv()
 
 app = Flask(__name__)
 app.debug = True
 
+#lol its already time to refactor
+
 CLIENT_ID = environ.get('CLIENT_ID')
 CLIENT_SECRET = environ.get('CLIENT_SECRET')
-print(CLIENT_ID)
-print(CLIENT_SECRET)
 REDIRECT_URI = "http://127.0.0.1:5000/callback"
 
 @app.route("/login")
@@ -61,7 +63,8 @@ def callback():
         url="https://accounts.spotify.com/api/token", headers=headers, data=body
     )
 
-    return res.text
+    #just doing this to easily see stuff since we dont have a front end
+    return getStartAndEndArtists(json.loads(res.text)['access_token'])
 
 
 @app.route("/refresh_token")
@@ -70,6 +73,28 @@ def refreshToken():
     # send post req to api with refresh token to receive new access token
     pass
 
+
+#right now this grabs the users top 50 artists, we can expand upon this later
+#it could pull randomly from all their saved tracks
+#it could force them to be above a certain popularity( we prob want this)
+#it could make sure they dont share any (all?) genres
+def getStartAndEndArtists(userAuth):
+    headers = {
+        'Authorization':'Bearer ' + userAuth
+    }
+    r = requests.get(url = 'https://api.spotify.com/v1/me/top/artists?limit=50', headers=headers)
+    res = json.loads(r.text)
+    artists = []
+    for item in res['items']:
+        artists.append({
+            'id' : item['id'],
+            'name' : item['name']
+        })
+
+    startArtist = artists[randint(0, len(artists)-1)]
+    endArtist = artists[randint(0, len(artists)-1)]
+
+    return 'startArtist: ' + startArtist['name'] + ', endArtist: ' + endArtist['name']
 
 if __name__ == "__main__":
     app.run()
