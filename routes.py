@@ -1,4 +1,5 @@
-from flask import Flask, redirect, url_for, request
+from flask import Flask, redirect, url_for, request, make_response
+from flask_cors import CORS, cross_origin
 from urllib.parse import urlencode, quote_plus
 import requests
 import base64
@@ -10,6 +11,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.debug = True
+CORS(app, support_credentials=True)
 
 #lol its already time to refactor
 
@@ -17,7 +19,33 @@ CLIENT_ID = environ.get('CLIENT_ID')
 CLIENT_SECRET = environ.get('CLIENT_SECRET')
 REDIRECT_URI = "http://127.0.0.1:5000/callback"
 
+@app.route('/getRelatedArtists')
+def get_related_artists():
+    
+    headers = {
+        'Authorization':'Bearer ' + request.args.get('accessToken')
+    }
+
+    params = {
+        'type':'artist',
+        'q':request.args.get('artistName')
+    } 
+    searchResult = requests.get(url='https://api.spotify.com/v1/search', params=params, headers=headers)
+    firstResult = json.loads(searchResult.text)['artists']['items'][0]
+    print(firstResult['name'])
+    artistId = firstResult['id']
+
+    r = requests.get(url='https://api.spotify.com/v1/artists/' + artistId + '/related-artists', headers=headers)
+    artists = json.loads(r.text)['artists']
+    artistNames  = []
+
+    for artist in artists:
+        artistNames.append(artist['name'])
+
+    return str(artistNames)
+
 @app.route("/login")
+@cross_origin(support_credentials=True, send_wildcard=True)
 def login():
     scope = "user-top-read user-read-private"
 
@@ -35,13 +63,13 @@ def login():
         + urlencode(auth_queries, quote_via=quote_plus)
     )
 
-    return redirect(
-        "https://accounts.spotify.com/authorize?"
-        + urlencode(auth_queries, quote_via=quote_plus)
-    )
+    return json.dumps({
+        'url':'https://accounts.spotify.com/authorize?'+ urlencode(auth_queries, quote_via=quote_plus)
+    })
 
 
 @app.route("/callback")
+@cross_origin(support_credentials=True, send_wildcard=True)
 def callback():
     auth_code = request.args.get("code")
     # add state
@@ -62,9 +90,11 @@ def callback():
     res = requests.post(
         url="https://accounts.spotify.com/api/token", headers=headers, data=body
     )
+    access_token = json.loads(res.text)['access_token']
 
     #just doing this to easily see stuff since we dont have a front end
-    return getStartAndEndArtists(json.loads(res.text)['access_token'])
+    # return getStartAndEndArtists(json.loads(res.text)['access_token']) 
+    return redirect('http://127.0.0.1:5500/frontend/index.html?accessToken=' + access_token)
 
 
 @app.route("/refresh_token")
@@ -72,7 +102,6 @@ def refreshToken():
     # req param will be the refresh token
     # send post req to api with refresh token to receive new access token
     pass
-
 
 #right now this grabs the users top 50 artists, we can expand upon this later
 #it could pull randomly from all their saved tracks
